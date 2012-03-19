@@ -4,7 +4,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0]).
+-export([start_link/0,start_link/1]).
 -export([start_pool/3]).
 
 %% Supervisor callbacks
@@ -16,6 +16,14 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
+
+start_link(Pools) ->
+    {ok,Pid} = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
+    case catch lists:foreach(fun start_pool/3,Pools) of
+	{'EXIT',Why} -> {error,Why};
+	_Other -> {ok, Pid}
+    end.
+    
 
 start_link() ->
     {ok,Pid} = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
