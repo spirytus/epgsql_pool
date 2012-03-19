@@ -1,45 +1,34 @@
-NAME		:= epgsql_pool
-VERSION		:= 0.1
 
-ERL  		:= erl
-ERLC 		:= erlc
+PREFIX:=../
+DEST:=$(PREFIX)$(PROJECT)
 
-EPGSQL_EBIN	:= ~/src/epgsql/ebin
+REBAR= ./rebar
 
-# ------------------------------------------------------------------------
+all:
+	@$(REBAR) compile
 
-ERLC_FLAGS	:= -Wall 
+edoc:
+	@$(REBAR) doc
 
-SRC			:= $(wildcard src/*.erl)
-TESTS 		:= $(wildcard test_src/*.erl)
-RELEASE		:= $(NAME)-$(VERSION).tar.gz
-
-APPDIR		:= $(NAME)-$(VERSION)
-BEAMS		:= $(SRC:src/%.erl=ebin/%.beam) 
-
-compile: $(BEAMS)
-
-app: compile
-	@mkdir -p $(APPDIR)/ebin
-	@cp -r ebin/* $(APPDIR)/ebin/
-
-release: app
-	@tar czvf $(RELEASE) $(APPDIR)
+test:
+	@rm -rf .eunit
+	@mkdir -p .eunit
+	@$(REBAR) skip_deps=true eunit
 
 clean:
-	@rm -f ebin/*.beam
-	@rm -rf $(NAME)-$(VERSION) $(NAME)-*.tar.gz
+	@$(REBAR) clean
 
-test: $(TESTS:test_src/%.erl=test_ebin/%.beam) $(BEAMS)
-	$(ERL) -pa $(EPGSQL_EBIN) -pa ebin/ -pa test_ebin/ -noshell -s pgsql_pool_tests test -s init stop
+build_plt:
+	@$(REBAR) build_plt
 
-# ------------------------------------------------------------------------
+dialyzer:
+	@$(REBAR) analyze
 
-.SUFFIXES: .erl .beam
-.PHONY:    app compile clean test
+app:
+	@$(REBAR) create template=mochiwebapp dest=$(DEST) appid=$(PROJECT)
 
-ebin/%.beam : src/%.erl
-	$(ERLC) $(ERLC_FLAGS) -o $(dir $@) $<
+devrel: dip1 dip2
 
-test_ebin/%.beam : test_src/%.erl
-	$(ERLC) $(ERLC_FLAGS) -o $(dir $@) $<
+dip1 dip2 dip3:
+	mkdir -p dev
+	(cd rel && rebar generate target_dir=../dev/$@ overlay_vars=vars/$@_vars.config force=1)
