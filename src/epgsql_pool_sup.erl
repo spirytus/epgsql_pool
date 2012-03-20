@@ -19,7 +19,7 @@
 
 start_link(Pools) ->
     {ok,Pid} = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
-    case catch lists:foreach(fun start_pool/3,Pools) of
+    case catch lists:foreach(fun start_pool/1,Pools) of
 	{'EXIT',Why} -> {error,Why};
 	_Other -> {ok, Pid}
     end.
@@ -41,12 +41,19 @@ start_pool(Name, Size, Opts) ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, [?CHILD(pgsql_pool,supervisor)]} }.
+    {ok,
+     {{simple_one_for_one, 2, 60},
+      [{pool,
+        {pgsql_pool, start_link, []},
+        permanent, 2000, supervisor,
+        [pgsql_pool]}]}}.
 
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
 
+start_pool({Name, Size, Opts}) ->
+    start_pool(Name, Size, Opts);
 start_pool(Name) ->
     case application:get_env(Name) of
         {ok, {Size, Opts}} -> start_pool(Name, Size, Opts);
