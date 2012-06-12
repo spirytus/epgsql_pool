@@ -2,7 +2,7 @@
 
 -export([start_link/2, start_link/3, stop/1]).
 -export([get_connection/1, get_connection/2, return_connection/2]).
--export([get_database/1]).
+-export([get_database/1, connection_info/1]).
 
 -export([init/1, code_change/3, terminate/2]). 
 -export([handle_call/3, handle_cast/2, handle_info/2]).
@@ -17,8 +17,9 @@ opts(Opts) ->
                 {password, ""},
                 {username, os:getenv("USER")},
                 {database, "not_given"}],
-    Opts2 = lists:ukeysort(1, proplists:unfold(Opts)),
-    proplists:normalize(lists:ukeymerge(1, Opts2, Defaults), []).
+    lists:ukeymerge(1,
+                    lists:ukeysort(1, proplists:unfold(Opts)),
+                    lists:ukeysort(1, Defaults)).
 
 
 start_link(Size, Opts) ->
@@ -58,6 +59,9 @@ get_database(P) ->
     return_connection(P, C),
     {ok, Db}.
 
+connection_info(C) ->
+    gen_server:call(C, connection_info).
+
 %% -- gen_server implementation --
 
 init({Name, Size, Opts}) ->
@@ -76,6 +80,7 @@ init({Name, Size, Opts}) ->
       monitors    = [],
       waiting     = queue:new(),
       timer       = TRef},
+    io:format("Pool ~p ~p ~p ~n", [Name, Size, Opts]),
     {ok, State}.
 
 %% Requestor wants a connection. When available then immediately return, otherwise add to the waiting queue.
@@ -88,13 +93,22 @@ handle_call(get_connection, From, #state{connections = Connections, waiting = Wa
 			case length(State#state.monitors) < State#state.size of
 				true ->
 					% Allocate a new connection and return it.
+                    slog:info("Adding new connections: ~p/~p", [length(State#state.monitors)+1,State#state.size]),
 					{ok, C} = connect(State#state.opts),
 				    {noreply, deliver(From, C, State)};
 				false ->
 					% Reached max connections, let the requestor wait
+                    slog:info("At max connections: ~p", [State#state.size]),
 	 				{noreply, State#state{waiting = queue:in(From, Waiting)}}
 			end
     end;
+
+handle_call(connection_info, _From, #state{connections = Connections,
+                                           waiting = Waiting,
+                                           monitors = Monitors} = State) ->
+    {reply, [{used, length(Monitors)},
+             {available, length(Connections)},
+             {waiting, queue:len(Waiting)}], State};
 
 %% Trap unsupported calls
 handle_call(Request, _From, State) ->
@@ -175,12 +189,15 @@ deliver({Pid,_Tag} = From, C, #state{monitors=Monitors} = State) ->
 	State#state{ monitors=[{C, M} | Monitors] }.
 
 return(C, #state{connections = Connections, waiting = Waiting} = State) ->
+    %%slog:info("POOL: Connection returned: Conns:~p Waiting:~p", [length(Connections), queue:len(Waiting)]),
     case queue:out(Waiting) of
         {{value, From}, Waiting2} ->
+            %%slog:info("Giving Conn to ~p", [From]),
             State2 = deliver(From, C, State),
             State2#state{waiting = Waiting2};
         {empty, _Waiting} ->
             Connections2 = [{C, now_secs()} | Connections],
+            %%slog:info("No Waiters, adding to available ~p", [length(Connections2)]),
             State#state{connections = Connections2}
     end.
 
