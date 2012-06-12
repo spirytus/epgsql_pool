@@ -93,12 +93,10 @@ handle_call(get_connection, From, #state{connections = Connections, waiting = Wa
 			case length(State#state.monitors) < State#state.size of
 				true ->
 					% Allocate a new connection and return it.
-                    slog:info("Adding new connections: ~p/~p", [length(State#state.monitors)+1,State#state.size]),
 					{ok, C} = connect(State#state.opts),
 				    {noreply, deliver(From, C, State)};
 				false ->
 					% Reached max connections, let the requestor wait
-                    slog:info("At max connections: ~p", [State#state.size]),
 	 				{noreply, State#state{waiting = queue:in(From, Waiting)}}
 			end
     end;
