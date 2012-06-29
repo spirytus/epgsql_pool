@@ -43,7 +43,9 @@ get_connection(P, Timeout) ->
 	try
     	gen_server:call(P, get_connection, Timeout)
 	catch 
-		_:_ ->
+        exit:{noproc, {gen_server, call, _}} ->
+            {error, no_such_pool};
+		exit:{timeout, {gen_server, call, _}} ->
             gen_server:cast(P, {cancel_wait, self()}),
             {error, timeout}
 	end.
