@@ -2,7 +2,7 @@
 
 -export([start_link/2, start_link/3, stop/1]).
 -export([get_connection/1, get_connection/2, return_connection/2]).
--export([get_database/1, connection_info/1, resize_pool/2]).
+-export([connection_info/1, resize_pool/2]).
 
 -export([init/1, code_change/3, terminate/2]). 
 -export([handle_call/3, handle_cast/2, handle_info/2]).
@@ -53,13 +53,6 @@ get_connection(P, Timeout) ->
 %% @doc Return a db connection back to the connection pool.
 return_connection(P, C) ->
     gen_server:cast(P, {return_connection, C}).
-
-%% @doc Return the name of the database used for the pool.
-get_database(P) ->
-    {ok, C} = get_connection(P),
-    {ok, Db} = pgsql_connection:database(C),
-    return_connection(P, C),
-    {ok, Db}.
 
 connection_info(C) ->
     gen_server:call(C, connection_info).
