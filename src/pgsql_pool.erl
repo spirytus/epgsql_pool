@@ -113,10 +113,15 @@ handle_call(connection_info, _From, #state{connections = Connections,
 
 handle_call({resize_pool, NewSize}, _From, #state{connections = Connections,
                                                   waiting = Waiting,
-                                                  monitors = Monitors} = State) ->
+                                                  monitors = Monitors,
+                                                  opts = Opts} = State) ->
     {reply, [{used, length(Monitors)},
              {available, length(Connections)},
-             {waiting, queue:len(Waiting)}], State#state{size = NewSize}};
+             {waiting, queue:len(Waiting)},
+             {timeout, case lists:keyfind(timeout, 1, Opts) of
+                           false -> 5000;
+                           Timeout -> Timeout
+                       end}], State#state{size = NewSize}};
 
 
 handle_call({change_timeout, NewTimeout}, _From, #state{opts = Opts0} = State) ->
