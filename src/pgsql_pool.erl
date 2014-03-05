@@ -113,7 +113,7 @@ handle_call(connection_info, _From, #state{connections = Connections,
              {size, Size},
              {timeout, case lists:keyfind(timeout, 1, Opts) of
                            false -> 5000;
-                           Timeout -> Timeout
+                           {timeout, Timeout} -> Timeout
                        end}], State};
 
 handle_call({resize_pool, NewSize}, _From, #state{connections = Connections,
