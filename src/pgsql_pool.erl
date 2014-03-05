@@ -125,7 +125,12 @@ handle_call({resize_pool, NewSize}, _From, #state{connections = Connections,
 
 
 handle_call({change_timeout, NewTimeout}, _From, #state{opts = Opts0} = State) ->
-    Opts = lists:keyreplace(timeout, 1, Opts0, {timeout, NewTimeout}),
+    Opts = case lists:keyfind(timeout, 1, Opts0) of
+               false ->
+                   [{timeout, NewTimeout} | Opts0];
+               _ ->
+                   lists:keyreplace(timeout, 1, Opts0, {timeout, NewTimeout})
+           end,
     {reply, ok, State#state{opts = Opts}};
 
 %% Trap unsupported calls
