@@ -2,7 +2,7 @@
 
 -export([start_link/2, start_link/3, stop/1]).
 -export([get_connection/1, get_connection/2, return_connection/2]).
--export([connection_info/1, resize_pool/2]).
+-export([connection_info/1, resize_pool/2, change_timeout/2]).
 
 -export([init/1, code_change/3, terminate/2]). 
 -export([handle_call/3, handle_cast/2, handle_info/2]).
@@ -60,6 +60,9 @@ connection_info(C) ->
 resize_pool(C, Size) ->
     gen_server:call(C, {resize_pool, Size}).
 
+change_timeout(C, Timeout) ->
+    gen_server:call(C, {change_timeout, Timeout}).
+
 %% -- gen_server implementation --
 
 init({Name, Size, Opts}) ->
@@ -114,6 +117,11 @@ handle_call({resize_pool, NewSize}, _From, #state{connections = Connections,
     {reply, [{used, length(Monitors)},
              {available, length(Connections)},
              {waiting, queue:len(Waiting)}], State#state{size = NewSize}};
+
+
+handle_call({change_timeout, NewTimeout}, _From, #state{opts = Opts0} = State) ->
+    Opts = lists:keyreplace(timeout, 1, Opts0, {timeout, NewTimeout}),
+    {reply, ok, State#state{opts = Opts}};
 
 %% Trap unsupported calls
 handle_call(Request, _From, State) ->
