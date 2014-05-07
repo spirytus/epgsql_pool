@@ -2,7 +2,7 @@
 
 -export([start_link/2, start_link/3, stop/1]).
 -export([get_connection/1, get_connection/2, return_connection/2]).
--export([get_database/1, connection_info/1]).
+-export([connection_info/1, resize_pool/2, change_timeout/2]).
 
 -export([init/1, code_change/3, terminate/2]). 
 -export([handle_call/3, handle_cast/2, handle_info/2]).
@@ -54,15 +54,14 @@ get_connection(P, Timeout) ->
 return_connection(P, C) ->
     gen_server:cast(P, {return_connection, C}).
 
-%% @doc Return the name of the database used for the pool.
-get_database(P) ->
-    {ok, C} = get_connection(P),
-    {ok, Db} = pgsql_connection:database(C),
-    return_connection(P, C),
-    {ok, Db}.
-
 connection_info(C) ->
     gen_server:call(C, connection_info).
+
+resize_pool(C, Size) ->
+    gen_server:call(C, {resize_pool, Size}).
+
+change_timeout(C, Timeout) ->
+    gen_server:call(C, {change_timeout, Timeout}).
 
 %% -- gen_server implementation --
 
@@ -105,10 +104,34 @@ handle_call(get_connection, From, #state{connections = Connections, waiting = Wa
 
 handle_call(connection_info, _From, #state{connections = Connections,
                                            waiting = Waiting,
-                                           monitors = Monitors} = State) ->
+                                           monitors = Monitors,
+                                           size = Size,
+                                           opts = Opts} = State) ->
     {reply, [{used, length(Monitors)},
              {available, length(Connections)},
-             {waiting, queue:len(Waiting)}], State};
+             {waiting, queue:len(Waiting)},
+             {size, Size},
+             {timeout, case lists:keyfind(timeout, 1, Opts) of
+                           false -> 5000;
+                           {timeout, Timeout} -> Timeout
+                       end}], State};
+
+handle_call({resize_pool, NewSize}, _From, #state{connections = Connections,
+                                                  waiting = Waiting,
+                                                  monitors = Monitors} = State) ->
+    {reply, [{used, length(Monitors)},
+             {available, length(Connections)},
+             {waiting, queue:len(Waiting)}], State#state{size = NewSize}};
+
+
+handle_call({change_timeout, NewTimeout}, _From, #state{opts = Opts0} = State) ->
+    Opts = case lists:keyfind(timeout, 1, Opts0) of
+               false ->
+                   [{timeout, NewTimeout} | Opts0];
+               _ ->
+                   lists:keyreplace(timeout, 1, Opts0, {timeout, NewTimeout})
+           end,
+    {reply, ok, State#state{opts = Opts}};
 
 %% Trap unsupported calls
 handle_call(Request, _From, State) ->
@@ -188,17 +211,23 @@ deliver({Pid,_Tag} = From, C, #state{monitors=Monitors} = State) ->
 	gen_server:reply(From, {ok, C}),
 	State#state{ monitors=[{C, M} | Monitors] }.
 
-return(C, #state{connections = Connections, waiting = Waiting} = State) ->
+return(C, #state{connections = Connections, monitors = Monitors, waiting = Waiting, size = Size} = State) ->
     %%slog:info("POOL: Connection returned: Conns:~p Waiting:~p", [length(Connections), queue:len(Waiting)]),
-    case queue:out(Waiting) of
-        {{value, From}, Waiting2} ->
-            %%slog:info("Giving Conn to ~p", [From]),
-            State2 = deliver(From, C, State),
-            State2#state{waiting = Waiting2};
-        {empty, _Waiting} ->
-            Connections2 = [{C, now_secs()} | Connections],
-            %%slog:info("No Waiters, adding to available ~p", [length(Connections2)]),
-            State#state{connections = Connections2}
+    case Size =< length(Monitors) of
+        true ->
+            pgsql:close(C),
+            State;
+        false ->
+            case queue:out(Waiting) of
+                {{value, From}, Waiting2} ->
+                    %%slog:info("Giving Conn to ~p", [From]),
+                    State2 = deliver(From, C, State),
+                    State2#state{waiting = Waiting2};
+                {empty, _Waiting} ->
+                    Connections2 = [{C, now_secs()} | Connections],
+                    %%slog:info("No Waiters, adding to available ~p", [length(Connections2)]),
+                    State#state{connections = Connections2}
+            end
     end.
 
 
