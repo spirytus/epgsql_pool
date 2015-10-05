@@ -5,7 +5,7 @@
 
 %% API
 -export([start_link/0,start_link/1]).
--export([start_pool/3]).
+-export([start_pool/3, restart_pool/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -36,6 +36,9 @@ start_link() ->
 start_pool(Name, Size, Opts) ->
     supervisor:start_child(?MODULE, [Name, Size, Opts]).
 
+restart_pool(Name, Size, Opts) ->
+    supervisor:restart_child(?MODULE, [Name, Size, Opts]).
+
 %% ===================================================================
 %% Supervisor callbacks
 %% ===================================================================
@@ -45,7 +48,7 @@ init([]) ->
      {{simple_one_for_one, 2, 60},
       [{pool,
         {pgsql_pool, start_link, []},
-        permanent, 2000, supervisor,
+        transient, 2000, supervisor,
         [pgsql_pool]}]}}.
 
 %% ===================================================================
