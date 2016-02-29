@@ -233,5 +233,5 @@ return(C, #state{connections = Connections, monitors = Monitors, waiting = Waiti
 
 %% Return the current time in seconds, used for timeouts.
 now_secs() ->
-    {M,S,_M} = erlang:now(),
+    {M,S,_M} = erlang:timestamp(),
     M*1000 + S.
